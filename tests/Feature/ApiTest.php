@@ -1,0 +1,117 @@
+<?php
+
+namespace Tests\Feature;
+
+use App\Models\Product;
+use App\Models\Rule;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
+
+class ApiTest extends TestCase
+{
+    use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+        $this->postJson('/api/products', ['sku' => 'MUG', 'name' => 'Mug', 'price_cents' => 1200, 'category' => 'kitchen'])->assertCreated();
+        $this->postJson('/api/products', ['sku' => 'INK', 'name' => 'Ink', 'price_cents' => 1000, 'cost_cents' => 800])->assertCreated();
+    }
+
+    public function test_a_quote_explains_every_rule(): void
+    {
+        $this->postJson('/api/rules', ['name' => 'Kitchen 10%', 'type' => 'percent_off', 'priority' => 5,
+            'params' => ['basis_points' => 1000, 'categories' => ['kitchen'], 'ignored' => 1]])->assertCreated()
+            ->assertJsonPath('params', ['basis_points' => 1000, 'categories' => ['kitchen']]);
+        $this->postJson('/api/rules', ['name' => 'Staff $1', 'type' => 'amount_off',
+            'params' => ['amount_cents' => 100], 'customer_groups' => ['staff']])->assertCreated();
+
+        $res = $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 2], ['sku' => 'INK', 'quantity' => 1]]])
+            ->assertOk()
+            ->assertJsonPath('subtotal_cents', 3400)
+            ->assertJsonPath('discount_cents', 240)
+            ->assertJsonPath('total_cents', 3160)
+            ->assertJsonPath('rules.0.result', 'applied')
+            ->assertJsonPath('rules.1.reason', 'the rule is for customer groups staff');
+        $this->assertSame(240, $res->json('lines.0.discounts.0.amount_cents'));
+    }
+
+    public function test_a_quote_lists_unknown_coupon_codes_and_spends_nothing(): void
+    {
+        $this->postJson('/api/rules', ['name' => 'Spring', 'type' => 'amount_off', 'params' => ['amount_cents' => 100],
+            'coupon_code' => 'spring', 'usage_limit' => 1])->assertCreated()->assertJsonPath('coupon_code', 'SPRING');
+        for ($i = 0; $i < 3; $i++) {
+            $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'coupon_codes' => ['Spring', 'NOPE']])
+                ->assertOk()->assertJsonPath('discount_cents', 100)->assertJsonPath('unknown_coupon_codes', ['NOPE']);
+        }
+        $this->assertSame(0, Rule::first()->times_used);
+    }
+
+    public function test_an_order_spends_a_coupon_use_and_the_last_use_runs_out(): void
+    {
+        $this->postJson('/api/rules', ['name' => 'Spring', 'type' => 'amount_off', 'params' => ['amount_cents' => 100],
+            'coupon_code' => 'SPRING', 'usage_limit' => 1])->assertCreated();
+        $cart = ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'coupon_codes' => ['spring']];
+
+        $id = $this->postJson('/api/orders', $cart)->assertCreated()->assertJsonPath('total_cents', 1100)->json('order_id');
+        $this->assertSame(1, Rule::first()->times_used);
+        $this->postJson('/api/orders', $cart)->assertStatus(409)
+            ->assertJsonPath('quote.rules.0.reason', 'coupon code SPRING has no uses left');
+        $this->assertSame(1, Rule::first()->times_used);
+        $this->getJson("/api/orders/{$id}")->assertOk()->assertJsonPath('total_cents', 1100);
+    }
+
+    public function test_an_order_refuses_an_unknown_coupon_and_a_set_time(): void
+    {
+        $this->postJson('/api/orders', ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'coupon_codes' => ['NOPE']])
+            ->assertStatus(422)->assertJsonPath('message', 'Unknown coupon code: NOPE.');
+        $this->postJson('/api/orders', ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'at' => '2030-01-01T00:00:00Z'])
+            ->assertStatus(422);
+        $this->assertDatabaseCount('orders', 0);
+    }
+
+    public function test_a_quote_can_be_priced_at_another_time(): void
+    {
+        $this->postJson('/api/rules', ['name' => 'Boxing Day', 'type' => 'percent_off', 'params' => ['basis_points' => 2500],
+            'starts_at' => '2026-12-26T00:00:00Z', 'ends_at' => '2026-12-27T00:00:00Z'])->assertCreated();
+        $cart = ['items' => [['sku' => 'MUG', 'quantity' => 1]]];
+        $this->postJson('/api/quotes', $cart + ['at' => '2026-12-26T08:00:00-08:00'])->assertJsonPath('discount_cents', 300);
+        $this->postJson('/api/quotes', $cart + ['at' => '2026-12-27T00:00:00Z'])->assertJsonPath('discount_cents', 0)
+            ->assertJsonPath('rules.0.reason', 'the rule ended at 2026-12-27T00:00:00+00:00');
+    }
+
+    public function test_bad_carts_are_refused(): void
+    {
+        $this->postJson('/api/quotes', ['items' => []])->assertStatus(422);
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'NOPE', 'quantity' => 1]]])->assertStatus(422)->assertJsonValidationErrors('items.0.sku');
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 1], ['sku' => 'MUG', 'quantity' => 2]]])->assertStatus(422);
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 0]]])->assertStatus(422);
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 1.5]]])->assertStatus(422);
+    }
+
+    public function test_bad_rules_are_refused(): void
+    {
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'percent_off', 'params' => ['basis_points' => 10001]])
+            ->assertJsonValidationErrors('params.basis_points');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'magic', 'params' => []])->assertJsonValidationErrors('type');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['skus' => ['MUG'], 'price_cents' => 1]])
+            ->assertJsonValidationErrors('params.skus');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'usage_limit' => 3])
+            ->assertJsonValidationErrors('usage_limit');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1],
+            'starts_at' => '2026-02-01', 'ends_at' => '2026-01-01'])->assertJsonValidationErrors('ends_at');
+        $this->postJson('/api/rules', ['name' => 'a', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'coupon_code' => 'SAVE'])->assertCreated();
+        $this->postJson('/api/rules', ['name' => 'b', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'coupon_code' => 'save'])
+            ->assertJsonValidationErrors('coupon_code');
+    }
+
+    public function test_rules_and_products_can_be_listed_and_removed(): void
+    {
+        $id = $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1]])->json('id');
+        $this->getJson('/api/products')->assertOk()->assertJsonCount(2)->assertJsonPath('0.sku', 'INK');
+        $this->getJson("/api/rules/{$id}")->assertOk()->assertJsonPath('name', 'x');
+        $this->deleteJson("/api/rules/{$id}")->assertNoContent();
+        $this->getJson('/api/rules')->assertOk()->assertJsonCount(0);
+        $this->assertSame(2, Product::count());
+    }
+}
