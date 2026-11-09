@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\ApiClient;
 use App\Models\Product;
 use App\Models\Rule;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -14,6 +15,7 @@ class ApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        $this->asToken($this->tokenFor(ApiClient::STAFF));
         $this->postJson('/api/products', ['sku' => 'MUG', 'name' => 'Mug', 'price_cents' => 1200, 'category' => 'kitchen'])->assertCreated();
         $this->postJson('/api/products', ['sku' => 'INK', 'name' => 'Ink', 'price_cents' => 1000, 'cost_cents' => 800])->assertCreated();
     }

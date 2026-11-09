@@ -1,3 +1,3 @@
 <?php
 
-// Console commands go here. The app adds none of its own yet.
+// The app's own commands (token:create, token:list, token:revoke) are classes in app/Console/Commands.

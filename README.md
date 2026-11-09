@@ -19,6 +19,7 @@ A pricing and discount rule engine with an HTTP API, built on Laravel. You store
 - Explains every rule on every quote: applied, with the amount, or skipped, with the reason.
 - Prices a cart with no side effects (`POST /api/quotes`), or prices it and stores it as an order, which spends 1 use of each coupon that applied (`POST /api/orders`).
 - Locks the coupon rules while an order is priced. 2 orders can therefore never both take the last use of a coupon.
+- Asks for an API token before any change (see [Tokens](#tokens)). A staff token can add products and add or remove rules. It can also place orders. A shop token can only place orders. Reading and quoting need no token.
 
 ## Who it is for
 
@@ -28,6 +29,7 @@ Shops and agencies that need discount rules they can read, test and explain to a
 
 - PHP 8.4.27. `composer.json` requires PHP 8.4.27 or later in 8.4, or 8.5.12 or later. Those are the first releases with the fixes for CVE-2026-109618 and CVE-2026-109619. The locked Symfony 8 packages need PHP 8.4 in any case.
 - Laravel 13.40.0, started from the laravel/laravel 13.11.0 skeleton, run with Composer 2.8.12.
+- Tokens: Laravel Sanctum 4.3.3.
 - Tests: PHPUnit 12.5.43 through `php artisan test`. Style: Laravel Pint 1.32.1.
 - Databases: SQLite 3.45.1 (the default, and the test database) and PostgreSQL 16.15. The full test suite passes on both.
 
@@ -48,6 +50,71 @@ The seed step adds a small sample shop: 4 products and 5 rules. The API then ans
 
 For PostgreSQL, set `DB_CONNECTION=pgsql` and the `DB_` lines in `.env` before you run `php artisan migrate --seed`.
 
+To add products or rules, or to place orders, make a token first (see [Tokens](#tokens)).
+
+## Tokens
+
+Every change needs a token, sent in the `Authorization` header as `Bearer <token>`. A token has 1 of 2 roles:
+
+| Role | What it can do |
+|---|---|
+| `staff` | Add products. Add and remove rules. Place orders. |
+| `shop` | Place orders. |
+
+Every `GET` in the [API](#api) table works without a token, and so does pricing a cart with `POST /api/quotes`.
+
+Make a token with `token:create`. Give a name for the client that will hold it, such as a till, and its role:
+
+```sh
+php artisan token:create till-1 --role=shop
+```
+
+```text
+2|made-up-token-for-this-example-0000000000000000
+Token made for till-1 with the role shop. It is shown only now: store it in a safe place.
+```
+
+The first line is the token. The database keeps only a SHA-256 hash of the part after the `|`, so a lost token cannot be shown again. Make a new one and revoke the old one. A name keeps the role it was first given: `token:create till-1 --role=staff` now fails, while `token:create till-1 --role=shop` gives till-1 a second token.
+
+Send the token with each change:
+
+```sh
+TOKEN='2|made-up-token-for-this-example-0000000000000000'
+curl -H 'Accept: application/json' -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"items": [{"sku": "TEA-01", "quantity": 1}]}' \
+  http://localhost:8000/api/orders
+```
+
+A change is refused in 2 ways:
+
+- 401 with the message `Unauthenticated.` when the token is missing. An unknown token and a revoked token get the same answer.
+- 403 with the message `Invalid ability provided.` when a shop token tries to change a product or a rule. With `APP_DEBUG=true`, as in `.env.example`, this answer also carries the exception and a stack trace.
+
+List the tokens (without their secrets) and revoke one by its ID:
+
+```sh
+php artisan token:list
+php artisan token:revoke 2
+```
+
+```text
++----+--------+-------+---------------------+---------------------+
+| ID | Client | Role  | Made                | Last used           |
++----+--------+-------+---------------------+---------------------+
+| 1  | ann    | staff | 2026-11-09 15:51:43 | 2026-11-09 15:51:43 |
+| 2  | till-1 | shop  | 2026-11-09 15:51:43 | 2026-11-09 15:51:43 |
++----+--------+-------+---------------------+---------------------+
+```
+
+```text
+Token 2 is revoked.
+```
+
+The times are in UTC. A revoked token fails on the next request: the order request above then answers 401.
+
+These outputs come from a real run against the sample shop, with the token replaced by a made-up one. The real token was made on a test database that has since been deleted.
+
 ## Tests
 
 ```sh
@@ -64,14 +131,15 @@ DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_DATABASE=pricerules_test \
 
 On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` with PHP 8.4. It also runs `php artisan test` with PHP 8.4 and 8.5, once on SQLite and once on a PostgreSQL 16 service (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-26 tests with 12,450 assertions:
+32 tests with 12,516 assertions:
 
 - The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time and hands out leftover cents 1 at a time. Every total, every discount on every line and every applied rule must match.
 - The same test checks the rules every quote must keep: no line below its floor or below 0, lines that add up to the total, a reason for every rule, an exclusive rule that applies alone.
 - Another test shuffles the rules of 100 scenarios and requires the same quote, which proves that the order the rules come in does not matter.
 - A database test stores 60 of the scenarios, prices them through `POST /api/quotes`, and compares the answer with the reference.
 - Unit tests pin each rule type, the rounding, the floors, the date window bounds, coupon limits.
-- API tests cover validation, coupon spending, a coupon running out (409), unknown coupons, pricing at another time.
+- API tests cover validation, coupon spending, a coupon running out (409), unknown coupons, pricing at another time. They send a staff token.
+- Token tests cover changes with no token (401), a shop token on changes (403), quotes and orders with a shop token, changes with a staff token, revoked tokens (401), the 3 token commands.
 
 ## How pricing decides
 
@@ -90,17 +158,17 @@ On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` wit
 
 All requests and answers are JSON. Send `Accept: application/json`.
 
-| Method | Path | What it does |
-|---|---|---|
-| GET | `/api/products` | Lists the products by SKU. |
-| POST | `/api/products` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
-| GET | `/api/rules` | Lists the rules by priority. |
-| POST | `/api/rules` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). |
-| GET | `/api/rules/{id}` | Shows 1 rule. |
-| DELETE | `/api/rules/{id}` | Removes 1 rule. |
-| POST | `/api/quotes` | Prices a cart: `items` (each a `sku` and a `quantity`), `customer_group`, `coupon_codes`, `at` (optional, to price at another time). Stores nothing. |
-| POST | `/api/orders` | Prices a cart at the current time, stores it, spends the coupon uses. Answers 409 when a coupon has no uses left, 422 for an unknown coupon code. |
-| GET | `/api/orders/{id}` | Shows a stored order with its full quote. |
+| Method | Path | Token | What it does |
+|---|---|---|---|
+| GET | `/api/products` | none | Lists the products by SKU. |
+| POST | `/api/products` | `staff` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
+| GET | `/api/rules` | none | Lists the rules by priority. |
+| POST | `/api/rules` | `staff` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). |
+| GET | `/api/rules/{id}` | none | Shows 1 rule. |
+| DELETE | `/api/rules/{id}` | `staff` | Removes 1 rule. |
+| POST | `/api/quotes` | none | Prices a cart: `items` (each a `sku` and a `quantity`), `customer_group`, `coupon_codes`, `at` (optional, to price at another time). Stores nothing. |
+| POST | `/api/orders` | `shop` or `staff` | Prices a cart at the current time, stores it, spends the coupon uses. Answers 409 when a coupon has no uses left, 422 for an unknown coupon code. |
+| GET | `/api/orders/{id}` | none | Shows a stored order with its full quote. |
 
 ## Sample quote
 
@@ -255,7 +323,9 @@ POST /api/quotes
 
 ## Limits today
 
-- There is no sign-in. Anyone who can reach the API can add rules and place orders.
+- Tokens do not expire. A token works until `token:revoke` removes it.
+- Reading needs no token. Anyone who knows an order ID can therefore read that order with `GET /api/orders/{id}`.
+- There is no endpoint to change or remove a product.
 - A bundle takes exactly 1 of each item it lists.
 - A cart-wide discount that a floor cuts on 1 line is not moved to the other lines.
 - Prices have 1 currency, and taxes are not handled.
