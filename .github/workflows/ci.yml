@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  style:
+    name: style (Pint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: shivammathur/setup-php@2.40.0
+        with:
+          php-version: "8.4"
+          coverage: none
+        env:
+          update: true
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Style
+        run: vendor/bin/pint --test
+
+  test:
+    name: test (PHP ${{ matrix.php }}, ${{ matrix.db }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ["8.4", "8.5"]
+        db: [sqlite, pgsql]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: pricerules_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: shivammathur/setup-php@2.40.0
+        with:
+          php-version: ${{ matrix.php }}
+          extensions: pdo_sqlite, pdo_pgsql
+          coverage: none
+        env:
+          update: true
+      - name: PHP version
+        run: php -v
+      - name: Install
+        run: composer install --no-interaction --no-progress --prefer-dist
+      - name: Prepare .env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+      - name: Test on SQLite
+        if: matrix.db == 'sqlite'
+        run: php artisan test
+      - name: Test on PostgreSQL
+        if: matrix.db == 'pgsql'
+        env:
+          DB_CONNECTION: pgsql
+          DB_HOST: 127.0.0.1
+          DB_PORT: "5432"
+          DB_DATABASE: pricerules_test
+          DB_USERNAME: postgres
+          DB_PASSWORD: ""
+        run: php artisan test

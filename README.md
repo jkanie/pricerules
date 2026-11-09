@@ -62,6 +62,8 @@ DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_DATABASE=pricerules_test \
   DB_USERNAME=pricerules DB_PASSWORD=secret php artisan test
 ```
 
+On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` with PHP 8.4. It also runs `php artisan test` with PHP 8.4 and 8.5, once on SQLite and once on a PostgreSQL 16 service (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
+
 26 tests with 12,450 assertions:
 
 - The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time and hands out leftover cents 1 at a time. Every total, every discount on every line and every applied rule must match.
