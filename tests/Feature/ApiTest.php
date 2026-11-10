@@ -98,6 +98,16 @@ class ApiTest extends TestCase
         $this->postJson('/api/rules', ['name' => 'x', 'type' => 'magic', 'params' => []])->assertJsonValidationErrors('type');
         $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['skus' => ['MUG'], 'price_cents' => 1]])
             ->assertJsonValidationErrors('params.skus');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'price_cents' => 1]])
+            ->assertJsonValidationErrors('params.items');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['items' => [['sku' => 'MUG', 'quantity' => 0], ['sku' => 'INK', 'quantity' => 1]], 'price_cents' => 1]])
+            ->assertJsonValidationErrors('params.items.0.quantity');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['items' => [['sku' => 'MUG', 'quantity' => 1], ['sku' => 'MUG', 'quantity' => 1]], 'price_cents' => 1]])
+            ->assertJsonValidationErrors('params.items.0.sku');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['skus' => ['MUG', 'INK'], 'items' => [['sku' => 'MUG', 'quantity' => 2]], 'price_cents' => 1]])
+            ->assertJsonValidationErrors('params.skus');
+        $this->postJson('/api/rules', ['name' => 'x', 'type' => 'bundle', 'params' => ['price_cents' => 1]])
+            ->assertJsonValidationErrors(['params.skus', 'params.items']);
         $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'usage_limit' => 3])
             ->assertJsonValidationErrors('usage_limit');
         $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1],
@@ -105,6 +115,26 @@ class ApiTest extends TestCase
         $this->postJson('/api/rules', ['name' => 'a', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'coupon_code' => 'SAVE'])->assertCreated();
         $this->postJson('/api/rules', ['name' => 'b', 'type' => 'amount_off', 'params' => ['amount_cents' => 1], 'coupon_code' => 'save'])
             ->assertJsonValidationErrors('coupon_code');
+    }
+
+    public function test_a_bundle_with_quantities_is_stored_and_priced(): void
+    {
+        $this->postJson('/api/rules', ['name' => '2 mugs and ink for $30', 'type' => 'bundle',
+            'params' => ['items' => [['sku' => 'MUG', 'quantity' => 2], ['sku' => 'INK', 'quantity' => 1]], 'price_cents' => 3000]])
+            ->assertCreated()
+            ->assertJsonPath('params.items', [['sku' => 'MUG', 'quantity' => 2], ['sku' => 'INK', 'quantity' => 1]])
+            ->assertJsonPath('params.price_cents', 3000)
+            ->assertJsonMissingPath('params.skus');
+
+        // 1 set: 2 mugs (2400) and 1 ink (1000) for 3000 is 400 off. The 3rd mug keeps its price.
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 3], ['sku' => 'INK', 'quantity' => 1]]])
+            ->assertOk()
+            ->assertJsonPath('discount_cents', 400)
+            ->assertJsonPath('rules.0.reason', '1 bundle(s)');
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 1], ['sku' => 'INK', 'quantity' => 1]]])
+            ->assertOk()
+            ->assertJsonPath('discount_cents', 0)
+            ->assertJsonPath('rules.0.reason', 'the cart has too few of MUG (1 of 2)');
     }
 
     public function test_rules_and_products_can_be_listed_and_removed(): void

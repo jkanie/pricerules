@@ -131,6 +131,40 @@ class EngineTest extends TestCase
         $this->assertSame('the cart lacks MUG', $this->ruleResult($q, 1)['reason']);
     }
 
+    public function test_bundles_take_a_quantity_per_item(): void
+    {
+        $rule = $this->rule(1, 'bundle', ['items' => [['sku' => 'PEN', 'quantity' => 1], ['sku' => 'MUG', 'quantity' => 2]], 'price_cents' => 2000]);
+        $q = $this->quote([['sku' => 'PEN', 'quantity' => 3], ['sku' => 'MUG', 'quantity' => 5]], [$rule]);
+        // 2 sets of 1 pen and 2 mugs: pens 999 x 2/3 = 666, mugs 6000 x 4/5 = 4800, 5466 - 4000 = 1466 off.
+        $this->assertSame(1466, $q['discount_cents']);
+        $this->assertSame('2 bundle(s)', $this->ruleResult($q, 1)['reason']);
+        $this->assertSame(1466, array_sum(array_column($q['lines'], 'discount_cents')));
+
+        $q = $this->quote([['sku' => 'PEN', 'quantity' => 3], ['sku' => 'MUG', 'quantity' => 1]], [$rule]);
+        $this->assertSame(0, $q['discount_cents']);
+        $this->assertSame('the cart has too few of MUG (1 of 2)', $this->ruleResult($q, 1)['reason']);
+
+        $q = $this->quote([['sku' => 'MUG', 'quantity' => 5]], [$rule]);
+        $this->assertSame('the cart lacks PEN', $this->ruleResult($q, 1)['reason']);
+    }
+
+    public function test_a_bundle_of_1_item_is_a_multi_buy(): void
+    {
+        $rule = $this->rule(1, 'bundle', ['items' => [['sku' => 'MUG', 'quantity' => 3]], 'price_cents' => 3000]);
+        $q = $this->quote([['sku' => 'MUG', 'quantity' => 7]], [$rule]);
+        // 2 sets of 3 mugs: 8400 x 6/7 = 7200, 7200 - 6000 = 1200 off. The 7th mug keeps its price.
+        $this->assertSame(1200, $q['discount_cents']);
+        $this->assertSame('2 bundle(s)', $this->ruleResult($q, 1)['reason']);
+    }
+
+    public function test_skus_and_items_of_quantity_1_price_the_same(): void
+    {
+        $cart = [['sku' => 'PEN', 'quantity' => 3], ['sku' => 'MUG', 'quantity' => 2]];
+        $old = $this->quote($cart, [$this->rule(1, 'bundle', ['skus' => ['PEN', 'MUG'], 'price_cents' => 1000])]);
+        $new = $this->quote($cart, [$this->rule(1, 'bundle', ['items' => [['sku' => 'PEN', 'quantity' => 1], ['sku' => 'MUG', 'quantity' => 1]], 'price_cents' => 1000])]);
+        $this->assertSame($old, $new);
+    }
+
     public function test_order_amount_off_needs_the_minimum(): void
     {
         $rule = $this->rule(1, 'order_amount_off', ['amount_cents' => 500, 'min_subtotal_cents' => 2000]);

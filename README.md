@@ -10,7 +10,7 @@ A pricing and discount rule engine with an HTTP API, built on Laravel. You store
   - `amount_off`: a fixed amount off each matching unit, or off each matching line.
   - `buy_x_get_y`: for every complete group of buy + get units of 1 item, the get units are free (or a share off, in basis points).
   - `tiered`: a share off a line whose quantity reaches a tier. The best tier reached counts.
-  - `bundle`: 1 of each listed item together costs a set price. A cart with 2 of each holds 2 bundles.
+  - `bundle`: a set of items together costs a set price. `skus` takes 1 of each listed item. `items` gives a quantity per item, such as 1 teapot and 2 mugs, or 3 mugs alone for a multi-buy. A cart holds as many bundles as its scarcest item allows: 3 teapots and 4 mugs hold 2 bundles of 1 teapot and 2 mugs. Units left over keep their price.
   - `order_amount_off`: a fixed amount off the whole cart once the cart reaches a minimum.
 - Lets each rule target SKUs, categories or both (empty means every item). A bundle lists its own SKUs, and an order discount covers the whole cart.
 - Limits a rule by date window, customer group or coupon code. A coupon code can carry a usage limit.
@@ -131,9 +131,9 @@ DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_DATABASE=pricerules_test \
 
 On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` with PHP 8.4. It also runs `php artisan test` with PHP 8.4 and 8.5, once on SQLite and once on a PostgreSQL 16 service (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-32 tests with 12,516 assertions:
+36 tests with 12,552 assertions:
 
-- The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time and hands out leftover cents 1 at a time. Every total, every discount on every line and every applied rule must match.
+- The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time, hands out leftover cents 1 at a time. Half of the random bundles list SKUs, the other half list items with 1 to 3 units each. Every total, every discount on every line and every applied rule must match.
 - The same test checks the rules every quote must keep: no line below its floor or below 0, lines that add up to the total, a reason for every rule, an exclusive rule that applies alone.
 - Another test shuffles the rules of 100 scenarios and requires the same quote, which proves that the order the rules come in does not matter.
 - A database test stores 60 of the scenarios, prices them through `POST /api/quotes`, and compares the answer with the reference.
@@ -163,7 +163,7 @@ All requests and answers are JSON. Send `Accept: application/json`.
 | GET | `/api/products` | none | Lists the products by SKU. |
 | POST | `/api/products` | `staff` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
 | GET | `/api/rules` | none | Lists the rules by priority. |
-| POST | `/api/rules` | `staff` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). |
+| POST | `/api/rules` | `staff` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). A bundle's `params` hold `price_cents` plus either `skus` (2 to 20 SKUs) or `items` (1 to 20 `{"sku", "quantity"}` entries, at least 2 units in total). |
 | GET | `/api/rules/{id}` | none | Shows 1 rule. |
 | DELETE | `/api/rules/{id}` | `staff` | Removes 1 rule. |
 | POST | `/api/quotes` | none | Prices a cart: `items` (each a `sku` and a `quantity`), `customer_group`, `coupon_codes`, `at` (optional, to price at another time). Stores nothing. |
@@ -326,7 +326,6 @@ POST /api/quotes
 - Tokens do not expire. A token works until `token:revoke` removes it.
 - Reading needs no token. Anyone who knows an order ID can therefore read that order with `GET /api/orders/{id}`.
 - There is no endpoint to change or remove a product.
-- A bundle takes exactly 1 of each item it lists.
 - A cart-wide discount that a floor cuts on 1 line is not moved to the other lines.
 - Prices have 1 currency, and taxes are not handled.
 - It has been built and tested on Linux only.

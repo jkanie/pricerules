@@ -35,8 +35,12 @@ class RuleRequest extends FormRequest
                 'params.tiers.*.basis_points' => ['required', ...$bp],
             ] + $targets,
             'bundle' => [
-                'params.skus' => ['required', 'array', 'min:2', 'max:20'],
+                'params.skus' => ['required_without:params.items', 'prohibits:params.items', 'array', 'min:2', 'max:20'],
                 'params.skus.*' => ['string', 'distinct', 'exists:products,sku'],
+                'params.items' => ['required_without:params.skus', 'array', 'min:1', 'max:20'],
+                'params.items.*' => ['array:sku,quantity'],
+                'params.items.*.sku' => ['required', 'string', 'distinct', 'exists:products,sku'],
+                'params.items.*.quantity' => ['required', 'integer', 'min:1', 'max:1000'],
                 'params.price_cents' => ['required', 'integer', 'min:0'],
             ],
             'order_amount_off' => [
@@ -69,6 +73,11 @@ class RuleRequest extends FormRequest
             if ($this->filled('usage_limit') && ! $code) {
                 $validator->errors()->add('usage_limit', 'A usage limit needs a coupon code.');
             }
+            $items = $this->input('params.items');
+            if ($this->input('type') === 'bundle' && is_array($items)
+                && array_sum(array_map(fn ($i) => is_array($i) && is_int($i['quantity'] ?? null) ? $i['quantity'] : 0, $items)) < 2) {
+                $validator->errors()->add('params.items', 'A bundle needs at least 2 units in total.');
+            }
             if ($code && Rule::query()->where('coupon_code', strtoupper($code))->exists()) {
                 $validator->errors()->add('coupon_code', 'That coupon code is already in use.');
             }
@@ -83,7 +92,7 @@ class RuleRequest extends FormRequest
             'amount_off' => ['amount_cents', 'per', 'skus', 'categories'],
             'buy_x_get_y' => ['buy', 'get', 'basis_points', 'skus', 'categories'],
             'tiered' => ['tiers', 'skus', 'categories'],
-            'bundle' => ['skus', 'price_cents'],
+            'bundle' => ['skus', 'items', 'price_cents'],
             'order_amount_off' => ['amount_cents', 'min_subtotal_cents'],
         ][$this->validated('type')];
 

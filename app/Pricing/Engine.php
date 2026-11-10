@@ -230,22 +230,33 @@ final class Engine
                 return [$out, $out !== [] && max($out) === 0 ? 'no line reaches the lowest tier' : null];
 
             case 'bundle':
+                $need = self::bundleNeeds($p);
                 $idx = [];
-                foreach ($p['skus'] as $sku) {
+                foreach (array_keys($need) as $sku) {
                     foreach ($lines as $i => $l) {
                         if ($l['sku'] === $sku) {
                             $idx[$sku] = $i;
                         }
                     }
                 }
-                if (count($idx) < count($p['skus'])) {
-                    return [[], 'the cart lacks '.implode(', ', array_diff($p['skus'], array_keys($idx)))];
+                if (count($idx) < count($need)) {
+                    return [[], 'the cart lacks '.implode(', ', array_diff(array_keys($need), array_keys($idx)))];
                 }
-                $sets = min(array_map(fn ($i) => $lines[$i]['quantity'], $idx));
+                $sets = min(array_map(fn ($sku) => intdiv($lines[$idx[$sku]]['quantity'], $need[$sku]), array_keys($idx)));
+                if ($sets === 0) {
+                    $short = [];
+                    foreach ($idx as $sku => $i) {
+                        if ($lines[$i]['quantity'] < $need[$sku]) {
+                            $short[] = "{$sku} ({$lines[$i]['quantity']} of {$need[$sku]})";
+                        }
+                    }
+
+                    return [[], 'the cart has too few of '.implode(', ', $short)];
+                }
                 $value = 0;
                 $weights = [];
-                foreach ($idx as $i) {
-                    $part = intdiv($lines[$i]['remaining'] * $sets, $lines[$i]['quantity']);
+                foreach ($idx as $sku => $i) {
+                    $part = intdiv($lines[$i]['remaining'] * $sets * $need[$sku], $lines[$i]['quantity']);
                     $weights[$i] = $part;
                     $value += $part;
                 }
@@ -267,6 +278,21 @@ final class Engine
         }
 
         return [[], 'unknown rule type'];
+    }
+
+    /**
+     * The units of each SKU that 1 bundle takes. "items" lists a quantity per SKU,
+     * the older "skus" list takes 1 of each.
+     *
+     * @return array<string, int>
+     */
+    public static function bundleNeeds(array $p): array
+    {
+        if (isset($p['items'])) {
+            return array_column($p['items'], 'quantity', 'sku');
+        }
+
+        return array_fill_keys($p['skus'], 1);
     }
 
     private function targets(array $p, array $line): bool

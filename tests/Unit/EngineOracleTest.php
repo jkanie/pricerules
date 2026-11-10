@@ -125,10 +125,12 @@ class EngineOracleTest extends TestCase
                 'amount_off' => ['amount_cents' => mt_rand(1, 3000), 'per' => $pick(['unit', 'line'])] + $targets(),
                 'buy_x_get_y' => ['buy' => mt_rand(1, 4), 'get' => mt_rand(1, 3), 'basis_points' => $pick([10000, 5000, mt_rand(1, 10000)])] + $targets(),
                 'tiered' => ['tiers' => array_map(fn () => ['min_quantity' => mt_rand(1, 20), 'basis_points' => mt_rand(1, 5000)], range(1, mt_rand(1, 3)))] + $targets(),
-                'bundle' => ['skus' => array_slice($someSkus(), 0, max(2, mt_rand(2, 3))), 'price_cents' => mt_rand(0, 30000)],
+                'bundle' => mt_rand(0, 1)
+                    ? ['skus' => array_slice($someSkus(), 0, max(2, mt_rand(2, 3))), 'price_cents' => mt_rand(0, 30000)]
+                    : ['items' => array_map(fn ($s) => ['sku' => $s, 'quantity' => mt_rand(1, 3)], $someSkus()), 'price_cents' => mt_rand(0, 30000)],
                 'order_amount_off' => ['amount_cents' => mt_rand(1, 20000), 'min_subtotal_cents' => mt_rand(0, 50000)],
             };
-            if ($type === 'bundle' && count($params['skus']) < 2) {
+            if ($type === 'bundle' && isset($params['skus']) && count($params['skus']) < 2) {
                 $params['skus'] = array_slice($skus, 0, 2);
             }
             $coupon = mt_rand(0, 3) === 0 ? 'CODE'.$id : null;

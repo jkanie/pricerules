@@ -170,26 +170,42 @@ final class ReferencePricer
                 }
                 break;
             case 'bundle':
+                // Units per set: "items" gives a quantity per SKU, "skus" means 1 of each.
+                $per = [];
+                foreach ($p['items'] ?? array_map(fn ($s) => ['sku' => $s, 'quantity' => 1], $p['skus']) as $it) {
+                    $per[$it['sku']] = $it['quantity'];
+                }
                 $where = [];
                 foreach ($lines as $i => $l) {
-                    if (in_array($l['sku'], $p['skus'], true)) {
+                    if (isset($per[$l['sku']])) {
                         $where[$l['sku']] = $i;
                     }
                 }
-                if (count($where) < count($p['skus'])) {
+                if (count($where) < count($per)) {
                     break;
                 }
                 $stock = array_map(fn ($i) => $lines[$i]['qty'], $where);
                 $sets = 0;
-                while (min($stock) > 0) {
+                $full = true;
+                while ($full) {
                     foreach ($stock as $k => $n) {
-                        $stock[$k] = $n - 1;
+                        if ($n < $per[$k]) {
+                            $full = false;
+                        }
                     }
-                    $sets++;
+                    if ($full) {
+                        foreach ($stock as $k => $n) {
+                            $stock[$k] = $n - $per[$k];
+                        }
+                        $sets++;
+                    }
+                }
+                if ($sets === 0) {
+                    break;
                 }
                 $w = [];
-                foreach ($where as $i) {
-                    $w[$i] = intdiv($lines[$i]['left'] * $sets, $lines[$i]['qty']);
+                foreach ($where as $k => $i) {
+                    $w[$i] = intdiv($lines[$i]['left'] * $sets * $per[$k], $lines[$i]['qty']);
                 }
                 $off = array_sum($w) - $p['price_cents'] * $sets;
                 $out = $off > 0 ? self::spread($off, $w) : [];
