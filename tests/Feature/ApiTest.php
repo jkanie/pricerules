@@ -137,6 +137,36 @@ class ApiTest extends TestCase
             ->assertJsonPath('rules.0.reason', 'the cart has too few of MUG (1 of 2)');
     }
 
+    public function test_a_product_can_be_read_and_changed_by_sku(): void
+    {
+        $id = $this->postJson('/api/orders', ['items' => [['sku' => 'MUG', 'quantity' => 1]]])
+            ->assertCreated()->assertJsonPath('total_cents', 1200)->json('order_id');
+
+        $this->getJson('/api/products/MUG')->assertOk()->assertJsonPath('price_cents', 1200);
+        $this->patchJson('/api/products/MUG', ['price_cents' => 1500, 'cost_cents' => 900])->assertOk()
+            ->assertJsonPath('sku', 'MUG')->assertJsonPath('name', 'Mug')->assertJsonPath('price_cents', 1500)
+            ->assertJsonPath('cost_cents', 900)->assertJsonPath('category', 'kitchen');
+        $this->patchJson('/api/products/MUG', ['category' => null])->assertOk()->assertJsonPath('category', null)
+            ->assertJsonPath('price_cents', 1500);
+
+        $this->postJson('/api/quotes', ['items' => [['sku' => 'MUG', 'quantity' => 2]]])
+            ->assertOk()->assertJsonPath('subtotal_cents', 3000);
+        // The stored order keeps the price it was priced with.
+        $this->getJson("/api/orders/{$id}")->assertOk()->assertJsonPath('total_cents', 1200)
+            ->assertJsonPath('subtotal_cents', 1200)->assertJsonPath('lines.0.unit_price_cents', 1200);
+    }
+
+    public function test_bad_product_changes_are_refused(): void
+    {
+        $this->getJson('/api/products/NOPE')->assertNotFound();
+        $this->patchJson('/api/products/NOPE', ['price_cents' => 1])->assertNotFound();
+        $this->patchJson('/api/products/MUG', ['sku' => 'CUP'])->assertUnprocessable()->assertJsonValidationErrors('sku');
+        $this->patchJson('/api/products/MUG', ['price_cents' => -1])->assertUnprocessable()->assertJsonValidationErrors('price_cents');
+        $this->patchJson('/api/products/MUG', ['price_cents' => null])->assertUnprocessable()->assertJsonValidationErrors('price_cents');
+        $this->patchJson('/api/products/MUG', ['name' => ''])->assertUnprocessable()->assertJsonValidationErrors('name');
+        $this->getJson('/api/products/MUG')->assertJsonPath('price_cents', 1200)->assertJsonPath('name', 'Mug');
+    }
+
     public function test_rules_and_products_can_be_listed_and_removed(): void
     {
         $id = $this->postJson('/api/rules', ['name' => 'x', 'type' => 'amount_off', 'params' => ['amount_cents' => 1]])->json('id');

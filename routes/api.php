@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 // Reading and quoting need no token.
 Route::get('/products', [ProductController::class, 'index']);
+Route::get('/products/{product:sku}', [ProductController::class, 'show']);
 Route::get('/rules', [RuleController::class, 'index']);
 Route::get('/rules/{rule}', [RuleController::class, 'show']);
 Route::post('/quotes', [QuoteController::class, 'quote']);
@@ -21,6 +22,7 @@ Route::middleware(['auth:sanctum', 'ability:'.ApiClient::SHOP.','.ApiClient::STA
 // Changing products and rules needs a staff token.
 Route::middleware(['auth:sanctum', 'abilities:'.ApiClient::STAFF])->group(function () {
     Route::post('/products', [ProductController::class, 'store']);
+    Route::patch('/products/{product:sku}', [ProductController::class, 'update']);
     Route::post('/rules', [RuleController::class, 'store']);
     Route::delete('/rules/{rule}', [RuleController::class, 'destroy']);
 });

@@ -19,7 +19,7 @@ A pricing and discount rule engine with an HTTP API, built on Laravel. You store
 - Explains every rule on every quote: applied, with the amount, or skipped, with the reason.
 - Prices a cart with no side effects (`POST /api/quotes`), or prices it and stores it as an order, which spends 1 use of each coupon that applied (`POST /api/orders`).
 - Locks the coupon rules while an order is priced. 2 orders can therefore never both take the last use of a coupon.
-- Asks for an API token before any change (see [Tokens](#tokens)). A staff token can add products and add or remove rules. It can also place orders. A shop token can only place orders. Reading and quoting need no token.
+- Asks for an API token before any change (see [Tokens](#tokens)). A staff token can add and change products and add or remove rules. It can also place orders. A shop token can only place orders. Reading and quoting need no token.
 
 ## Who it is for
 
@@ -58,7 +58,7 @@ Every change needs a token, sent in the `Authorization` header as `Bearer <token
 
 | Role | What it can do |
 |---|---|
-| `staff` | Add products. Add and remove rules. Place orders. |
+| `staff` | Add and change products. Add and remove rules. Place orders. |
 | `shop` | Place orders. |
 
 Every `GET` in the [API](#api) table works without a token, and so does pricing a cart with `POST /api/quotes`.
@@ -162,6 +162,8 @@ All requests and answers are JSON. Send `Accept: application/json`.
 |---|---|---|---|
 | GET | `/api/products` | none | Lists the products by SKU. |
 | POST | `/api/products` | `staff` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
+| GET | `/api/products/{sku}` | none | Shows 1 product. |
+| PATCH | `/api/products/{sku}` | `staff` | Changes any of `name`, `price_cents`, `cost_cents`, `category`. The SKU cannot change, because carts and bundle rules name products by SKU. Stored orders keep the prices they were priced with. |
 | GET | `/api/rules` | none | Lists the rules by priority. |
 | POST | `/api/rules` | `staff` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). A bundle's `params` hold `price_cents` plus either `skus` (2 to 20 SKUs) or `items` (1 to 20 `{"sku", "quantity"}` entries, at least 2 units in total). |
 | GET | `/api/rules/{id}` | none | Shows 1 rule. |

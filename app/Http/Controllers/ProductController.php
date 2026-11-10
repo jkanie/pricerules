@@ -24,4 +24,27 @@ class ProductController extends Controller
 
         return response()->json(Product::create($data), 201);
     }
+
+    public function show(Product $product)
+    {
+        return $product;
+    }
+
+    /**
+     * Changes the name, price, cost or category of 1 product. The SKU stays, because carts and
+     * bundle rules name products by SKU. Stored orders keep the prices they were priced with.
+     */
+    public function update(Request $request, Product $product)
+    {
+        $data = $request->validate([
+            'sku' => ['prohibited'],
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'price_cents' => ['sometimes', 'required', 'integer', 'min:0'],
+            'cost_cents' => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'category' => ['sometimes', 'nullable', 'string', 'max:64'],
+        ]);
+        $product->update($data);
+
+        return $product->refresh();
+    }
 }

@@ -32,6 +32,7 @@ class AuthTest extends TestCase
     {
         $this->asToken(null);
         $this->postJson('/api/products', self::PRODUCT)->assertUnauthorized()->assertJsonPath('message', 'Unauthenticated.');
+        $this->patchJson('/api/products/MUG', ['price_cents' => 1])->assertUnauthorized();
         $this->postJson('/api/rules', self::RULE)->assertUnauthorized();
         $this->deleteJson("/api/rules/{$this->ruleId}")->assertUnauthorized();
         $this->postJson('/api/orders', self::CART)->assertUnauthorized();
@@ -46,6 +47,7 @@ class AuthTest extends TestCase
     {
         $this->asToken(null);
         $this->getJson('/api/products')->assertOk()->assertJsonCount(1);
+        $this->getJson('/api/products/MUG')->assertOk();
         $this->getJson('/api/rules')->assertOk()->assertJsonCount(1);
         $this->getJson("/api/rules/{$this->ruleId}")->assertOk();
         $this->postJson('/api/quotes', self::CART)->assertOk()->assertJsonPath('total_cents', 1199);
@@ -55,6 +57,7 @@ class AuthTest extends TestCase
     {
         $this->asToken($this->tokenFor(ApiClient::SHOP));
         $this->postJson('/api/products', self::PRODUCT)->assertForbidden()->assertJsonPath('message', 'Invalid ability provided.');
+        $this->patchJson('/api/products/MUG', ['price_cents' => 1])->assertForbidden();
         $this->postJson('/api/rules', self::RULE)->assertForbidden();
         $this->deleteJson("/api/rules/{$this->ruleId}")->assertForbidden();
         $this->assertSame(1, Product::count());
@@ -69,10 +72,11 @@ class AuthTest extends TestCase
     {
         $this->asToken($this->tokenFor(ApiClient::STAFF));
         $this->postJson('/api/products', self::PRODUCT)->assertCreated();
+        $this->patchJson('/api/products/MUG', ['price_cents' => 1300])->assertOk();
         $id = $this->postJson('/api/rules', self::RULE)->assertCreated()->json('id');
         $this->deleteJson("/api/rules/{$id}")->assertNoContent();
         $this->deleteJson("/api/rules/{$this->ruleId}")->assertNoContent();
-        $this->postJson('/api/orders', self::CART)->assertCreated()->assertJsonPath('total_cents', 1200);
+        $this->postJson('/api/orders', self::CART)->assertCreated()->assertJsonPath('total_cents', 1300);
         $this->assertSame(2, Product::count());
         $this->assertSame(0, Rule::count());
     }
