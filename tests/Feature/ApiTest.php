@@ -156,6 +156,20 @@ class ApiTest extends TestCase
             ->assertJsonPath('subtotal_cents', 1200)->assertJsonPath('lines.0.unit_price_cents', 1200);
     }
 
+    public function test_products_can_be_listed_by_category(): void
+    {
+        $this->postJson('/api/products', ['sku' => 'BAG', 'name' => 'Bag', 'price_cents' => 500])->assertCreated();
+        $this->postJson('/api/products', ['sku' => 'BOWL', 'name' => 'Bowl', 'price_cents' => 900, 'category' => 'kitchen'])->assertCreated();
+
+        $skus = fn (string $url) => array_column($this->getJson($url)->assertOk()->json(), 'sku');
+        $this->assertSame(['BAG', 'BOWL', 'INK', 'MUG'], $skus('/api/products'));
+        $this->assertSame(['BOWL', 'MUG'], $skus('/api/products?category=kitchen'));
+        $this->assertSame([], $skus('/api/products?category=pantry'));
+        $this->assertSame([], $skus('/api/products?category=Kitchen'));
+        $this->assertSame(['BAG', 'INK'], $skus('/api/products?category='));
+        $this->getJson('/api/products?category[]=kitchen')->assertUnprocessable()->assertJsonValidationErrors('category');
+    }
+
     public function test_bad_product_changes_are_refused(): void
     {
         $this->getJson('/api/products/NOPE')->assertNotFound();

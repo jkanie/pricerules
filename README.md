@@ -160,10 +160,10 @@ All requests and answers are JSON. Send `Accept: application/json`.
 
 | Method | Path | Token | What it does |
 |---|---|---|---|
-| GET | `/api/products` | none | Lists the products by SKU. |
+| GET | `/api/products` | none | Lists the products by SKU. `?category=kitchen` keeps 1 category (an exact match), and `?category=` with no value keeps the products that have no category. |
 | POST | `/api/products` | `staff` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
 | GET | `/api/products/{sku}` | none | Shows 1 product. |
-| PATCH | `/api/products/{sku}` | `staff` | Changes any of `name`, `price_cents`, `cost_cents`, `category`. The SKU cannot change, because carts and bundle rules name products by SKU. Stored orders keep the prices they were priced with. |
+| PATCH | `/api/products/{sku}` | `staff` | Changes any of `name`, `price_cents`, `cost_cents`, `category`. The SKU cannot change because carts and bundle rules name products by SKU. Stored orders keep the prices they were priced with. |
 | GET | `/api/rules` | none | Lists the rules by priority. |
 | POST | `/api/rules` | `staff` | Adds a rule: `name`, `type`, `params`, plus `priority`, `exclusive`, `active`, `starts_at`, `ends_at`, `customer_groups`, `coupon_code`, `usage_limit` (all optional). A bundle's `params` hold `price_cents` plus either `skus` (2 to 20 SKUs) or `items` (1 to 20 `{"sku", "quantity"}` entries, at least 2 units in total). |
 | GET | `/api/rules/{id}` | none | Shows 1 rule. |

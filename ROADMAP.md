@@ -1,6 +1,6 @@
 # Roadmap
 
-Planned work after the seed, with an hour estimate per item. The total is 21 hours.
+Planned work after the seed, with an hour estimate per item. The total is 25 hours.
 
 ## 1. Move a cut cart-wide discount to other lines, 1.5 hours
 
@@ -52,6 +52,16 @@ Planned work after the seed, with an hour estimate per item. The total is 21 hou
 - What: a change log, a tag, a Docker Compose file that starts the API with PostgreSQL and the sample shop.
 - Why: the set-up takes PHP, Composer, a database today, and 1 command lowers the bar for trying it.
 
+## 11. Price history per product, 2 hours
+
+- What: a product_prices table that keeps each price_cents and cost_cents with the time it took effect and the staff client that set it, filled by PATCH /api/products/{sku}, with GET /api/products/{sku}/prices to read it.
+- Why: a price change today over-writes the old price. Stored orders keep their own prices, but nothing shows when a price changed or who changed it.
+
+## 12. Product import from CSV, 2 hours
+
+- What: an artisan command and a staff end-point that read a CSV of sku, name, price_cents, cost_cents, category, then add new products and change existing ones in 1 transaction, with a dry-run that lists the changes and every bad row (line number and reason).
+- Why: a shop with hundreds of products adds them 1 request at a time today.
+
 ## Total
 
-23 hours.
+25 hours.

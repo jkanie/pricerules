@@ -7,9 +7,20 @@ use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function index()
+    /**
+     * Lists the products by SKU. ?category=kitchen keeps 1 category, and ?category= (empty) keeps the products
+     * with no category, the same products that a category rule never matches.
+     */
+    public function index(Request $request)
     {
-        return Product::query()->orderBy('sku')->get();
+        $request->validate(['category' => ['sometimes', 'nullable', 'string', 'max:64']]);
+        $query = Product::query()->orderBy('sku');
+        if ($request->has('category')) {
+            $category = $request->query('category');
+            $category === null || $category === '' ? $query->whereNull('category') : $query->where('category', $category);
+        }
+
+        return $query->get();
     }
 
     public function store(Request $request)
@@ -31,7 +42,7 @@ class ProductController extends Controller
     }
 
     /**
-     * Changes the name, price, cost or category of 1 product. The SKU stays, because carts and
+     * Changes any of name, price, cost, category of 1 product. The SKU stays because carts and
      * bundle rules name products by SKU. Stored orders keep the prices they were priced with.
      */
     public function update(Request $request, Product $product)
