@@ -170,6 +170,32 @@ class ApiTest extends TestCase
         $this->getJson('/api/products?category[]=kitchen')->assertUnprocessable()->assertJsonValidationErrors('category');
     }
 
+    public function test_rules_can_be_listed_by_type_and_by_whether_they_are_in_force(): void
+    {
+        $this->travelTo('2027-03-10 12:00:00');
+        $add = fn (string $name, string $type, array $params, array $extra = []) => $this->postJson('/api/rules',
+            ['name' => $name, 'type' => $type, 'params' => $params] + $extra)->assertCreated();
+        $off = ['amount_cents' => 100];
+        $add('Plain', 'amount_off', $off);
+        $add('Ten', 'percent_off', ['basis_points' => 1000], ['priority' => 9]);
+        $add('Off', 'amount_off', $off, ['active' => false]);
+        $add('Later', 'amount_off', $off, ['starts_at' => '2027-03-11T00:00:00Z']);
+        $add('Started', 'amount_off', $off, ['starts_at' => '2027-03-10T12:00:00Z']);
+        $add('Ended', 'amount_off', $off, ['starts_at' => '2027-03-01T00:00:00Z', 'ends_at' => '2027-03-10T12:00:00Z']);
+        $add('Running', 'amount_off', $off, ['ends_at' => '2027-03-10T12:00:01Z']);
+
+        $names = fn (string $url) => array_column($this->getJson($url)->assertOk()->json(), 'name');
+        $this->assertSame(['Ten', 'Plain', 'Off', 'Later', 'Started', 'Ended', 'Running'], $names('/api/rules'));
+        $this->assertSame(['Ten'], $names('/api/rules?type=percent_off'));
+        $this->assertSame([], $names('/api/rules?type=bundle'));
+        // A rule starts at its starts_at and has ended at its ends_at, as in a quote.
+        $this->assertSame(['Ten', 'Plain', 'Started', 'Running'], $names('/api/rules?in_force=1'));
+        $this->assertSame(['Off', 'Later', 'Ended'], $names('/api/rules?in_force=0'));
+        $this->assertSame(['Plain', 'Started', 'Running'], $names('/api/rules?type=amount_off&in_force=1'));
+        $this->getJson('/api/rules?type=free')->assertUnprocessable()->assertJsonValidationErrors('type');
+        $this->getJson('/api/rules?in_force=maybe')->assertUnprocessable()->assertJsonValidationErrors('in_force');
+    }
+
     public function test_bad_product_changes_are_refused(): void
     {
         $this->getJson('/api/products/NOPE')->assertNotFound();
