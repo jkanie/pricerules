@@ -156,6 +156,27 @@ class ApiTest extends TestCase
             ->assertJsonPath('subtotal_cents', 1200)->assertJsonPath('lines.0.unit_price_cents', 1200);
     }
 
+    public function test_products_can_be_found_by_text_in_the_sku_or_name(): void
+    {
+        foreach ([['TEA-01', 'Green tea 100%'], ['TEA-02', 'Black tea'], ['CUP_9', 'Tea cup'], ['PLATE', 'Plate']] as [$sku, $name]) {
+            $this->postJson('/api/products', ['sku' => $sku, 'name' => $name, 'price_cents' => 300])->assertCreated();
+        }
+
+        $skus = fn (string $url) => array_column($this->getJson($url)->assertOk()->json(), 'sku');
+        // The SKU or the name, in any case of A to Z, in SKU order.
+        $this->assertSame(['CUP_9', 'TEA-01', 'TEA-02'], $skus('/api/products?q=tea'));
+        $this->assertSame(['CUP_9', 'TEA-01', 'TEA-02'], $skus('/api/products?q=TeA'));
+        $this->assertSame(['TEA-02'], $skus('/api/products?q=ea-02'));
+        // % and _ are plain characters, not wild-cards.
+        $this->assertSame(['TEA-01'], $skus('/api/products?q=100%25'));
+        $this->assertSame(['CUP_9'], $skus('/api/products?q=p_'));
+        $this->assertSame([], $skus('/api/products?q=%25%25'));
+        // Blank text keeps every product, and q works with category.
+        $this->assertCount(6, $skus('/api/products?q=%20%20'));
+        $this->assertSame(['MUG'], $skus('/api/products?q=mug&category=kitchen'));
+        $this->getJson('/api/products?q[]=tea')->assertUnprocessable()->assertJsonValidationErrors('q');
+    }
+
     public function test_products_can_be_listed_by_category(): void
     {
         $this->postJson('/api/products', ['sku' => 'BAG', 'name' => 'Bag', 'price_cents' => 500])->assertCreated();

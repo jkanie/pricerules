@@ -160,7 +160,7 @@ All requests and answers are JSON. Send `Accept: application/json`.
 
 | Method | Path | Token | What it does |
 |---|---|---|---|
-| GET | `/api/products` | none | Lists the products by SKU. `?category=kitchen` keeps 1 category (an exact match), and `?category=` with no value keeps the products that have no category. |
+| GET | `/api/products` | none | Lists the products by SKU. `?category=kitchen` keeps 1 category (an exact match), and `?category=` with no value keeps the products that have no category. `?q=mug` keeps the products whose SKU or name holds the text, ignoring the case of A to Z. `%` and `_` in the text are plain characters. |
 | POST | `/api/products` | `staff` | Adds a product: `sku`, `name`, `price_cents`, `cost_cents` (optional), `category` (optional). |
 | GET | `/api/products/{sku}` | none | Shows 1 product. |
 | PATCH | `/api/products/{sku}` | `staff` | Changes any of `name`, `price_cents`, `cost_cents`, `category`. The SKU cannot change because carts and bundle rules name products by SKU. Stored orders keep the prices they were priced with. |
