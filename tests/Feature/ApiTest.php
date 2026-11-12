@@ -177,6 +177,24 @@ class ApiTest extends TestCase
         $this->getJson('/api/products?q[]=tea')->assertUnprocessable()->assertJsonValidationErrors('q');
     }
 
+    public function test_products_can_be_listed_by_price_range(): void
+    {
+        foreach ([['P-499', 499], ['P-500', 500], ['P-2000', 2000], ['P-2001', 2001]] as [$sku, $cents]) {
+            $this->postJson('/api/products', ['sku' => $sku, 'name' => $sku, 'price_cents' => $cents])->assertCreated();
+        }
+        $skus = fn (string $url) => array_column($this->getJson($url)->assertOk()->json(), 'sku');
+
+        // Both ends are included.
+        $this->assertSame(['P-2000', 'P-500'], $skus('/api/products?min_price_cents=500&max_price_cents=2000&q=p-'));
+        $this->assertSame(['P-2000', 'P-2001'], $skus('/api/products?min_price_cents=2000&q=p-'));
+        $this->assertSame(['P-499', 'P-500'], $skus('/api/products?max_price_cents=500&q=p-'));
+        $this->assertSame(['P-500'], $skus('/api/products?min_price_cents=500&max_price_cents=500&q=p-'));
+        $this->getJson('/api/products?min_price_cents=-1')->assertUnprocessable()->assertJsonValidationErrors('min_price_cents');
+        $this->getJson('/api/products?max_price_cents=1.5')->assertUnprocessable()->assertJsonValidationErrors('max_price_cents');
+        $this->getJson('/api/products?min_price_cents=600&max_price_cents=500')
+            ->assertUnprocessable()->assertJsonValidationErrors('max_price_cents');
+    }
+
     public function test_products_can_be_listed_by_category(): void
     {
         $this->postJson('/api/products', ['sku' => 'BAG', 'name' => 'Bag', 'price_cents' => 500])->assertCreated();

@@ -11,12 +11,17 @@ class ProductController extends Controller
      * Lists the products by SKU. ?category=kitchen keeps 1 category, and ?category= (empty) keeps the products
      * with no category, the same products that a category rule never matches. ?q=mug keeps the products whose SKU
      * or name holds the text, ignoring the case of A to Z. % and _ in the text are plain characters.
+     * ?min_price_cents=500&max_price_cents=2000 keeps the products whose list price is in that range, both ends
+     * included.
      */
     public function index(Request $request)
     {
         $request->validate([
             'category' => ['sometimes', 'nullable', 'string', 'max:64'],
             'q' => ['sometimes', 'nullable', 'string', 'max:255'],
+            'min_price_cents' => ['sometimes', 'integer', 'min:0'],
+            // gte refuses a field whose partner is missing, so it applies only when both are given.
+            'max_price_cents' => ['sometimes', 'integer', 'min:0', ...($request->has('min_price_cents') ? ['gte:min_price_cents'] : [])],
         ]);
         $query = Product::query()->orderBy('sku');
         if ($request->has('category')) {
@@ -29,6 +34,13 @@ class ProductController extends Controller
             $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], strtolower($text)).'%';
             $query->where(fn ($q) => $q->whereRaw("LOWER(sku) LIKE ? ESCAPE '!'", [$like])
                 ->orWhereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$like]));
+        }
+
+        if ($request->has('min_price_cents')) {
+            $query->where('price_cents', '>=', (int) $request->query('min_price_cents'));
+        }
+        if ($request->has('max_price_cents')) {
+            $query->where('price_cents', '<=', (int) $request->query('max_price_cents'));
         }
 
         return $query->get();
