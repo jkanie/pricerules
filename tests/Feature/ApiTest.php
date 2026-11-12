@@ -195,6 +195,23 @@ class ApiTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('max_price_cents');
     }
 
+    public function test_products_can_be_sorted_by_price_or_sku(): void
+    {
+        foreach ([['S-B', 700], ['S-A', 700], ['S-C', 300], ['S-D', 900]] as [$sku, $cents]) {
+            $this->postJson('/api/products', ['sku' => $sku, 'name' => $sku, 'price_cents' => $cents])->assertCreated();
+        }
+        $skus = fn (string $sort) => array_column($this->getJson('/api/products?q=s-'.$sort)->assertOk()->json(), 'sku');
+
+        // Equal prices keep SKU order both ways.
+        $this->assertSame(['S-C', 'S-A', 'S-B', 'S-D'], $skus('&sort=price_cents'));
+        $this->assertSame(['S-D', 'S-A', 'S-B', 'S-C'], $skus('&sort=-price_cents'));
+        $this->assertSame(['S-A', 'S-B', 'S-C', 'S-D'], $skus(''));
+        $this->assertSame(['S-A', 'S-B', 'S-C', 'S-D'], $skus('&sort=sku'));
+        $this->assertSame(['S-D', 'S-C', 'S-B', 'S-A'], $skus('&sort=-sku'));
+        $this->getJson('/api/products?sort=name')->assertUnprocessable()->assertJsonValidationErrors('sort');
+        $this->getJson('/api/products?sort[]=sku')->assertUnprocessable()->assertJsonValidationErrors('sort');
+    }
+
     public function test_products_can_be_listed_by_category(): void
     {
         $this->postJson('/api/products', ['sku' => 'BAG', 'name' => 'Bag', 'price_cents' => 500])->assertCreated();

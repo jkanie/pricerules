@@ -12,7 +12,8 @@ class ProductController extends Controller
      * with no category, the same products that a category rule never matches. ?q=mug keeps the products whose SKU
      * or name holds the text, ignoring the case of A to Z. % and _ in the text are plain characters.
      * ?min_price_cents=500&max_price_cents=2000 keeps the products whose list price is in that range, both ends
-     * included.
+     * included. ?sort=price_cents lists the cheapest 1st, ?sort=-price_cents the dearest 1st, with equal prices by
+     * SKU. ?sort=sku (the default) and ?sort=-sku list by SKU either way.
      */
     public function index(Request $request)
     {
@@ -22,8 +23,14 @@ class ProductController extends Controller
             'min_price_cents' => ['sometimes', 'integer', 'min:0'],
             // gte refuses a field whose partner is missing, so it applies only when both are given.
             'max_price_cents' => ['sometimes', 'integer', 'min:0', ...($request->has('min_price_cents') ? ['gte:min_price_cents'] : [])],
+            'sort' => ['sometimes', 'string', 'in:sku,-sku,price_cents,-price_cents'],
         ]);
-        $query = Product::query()->orderBy('sku');
+        $sort = (string) $request->query('sort', 'sku');
+        $column = ltrim($sort, '-');
+        $query = Product::query()->orderBy($column, str_starts_with($sort, '-') ? 'desc' : 'asc');
+        if ($column !== 'sku') {
+            $query->orderBy('sku');
+        }
         if ($request->has('category')) {
             $category = $request->query('category');
             $category === null || $category === '' ? $query->whereNull('category') : $query->where('category', $category);

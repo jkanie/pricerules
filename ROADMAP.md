@@ -1,6 +1,6 @@
 # Roadmap
 
-Planned work after the seed, with an hour estimate per item. The total is 25 hours.
+Planned work after the seed, with an hour estimate per item. The total is 30 hours.
 
 ## 1. Move a cut cart-wide discount to other lines, 1.5 hours
 
@@ -62,6 +62,21 @@ Planned work after the seed, with an hour estimate per item. The total is 25 hou
 - What: an artisan command and a staff end-point that read a CSV of sku, name, price_cents, cost_cents, category, then add new products and change existing ones in 1 transaction, with a dry-run that lists the changes and every bad row (line number and reason).
 - Why: a shop with hundreds of products adds them 1 request at a time today.
 
+## 13. Rule preview: the products a rule applies to, 1.5 hours
+
+- What: `GET /api/rules/{rule}/products` lists the products whose category or SKU the rule's conditions name, without a cart.
+- Why: before a rule goes live, a shop wants to see which products it touches. Today the only way is a test cart per product.
+
+## 14. Export and import of rules as JSON, 2 hours
+
+- What: `GET /api/rules/export` writes every rule as JSON, and `POST /api/rules/import` reads such a file into another shop in 1 transaction, with a dry run 1st.
+- Why: a shop moves its rules from a test set-up to the live one, and keeps them in version control.
+
+## 15. Bulk price change for a category, 1.5 hours
+
+- What: `POST /api/products/reprice` changes the list price of every product in a category by a percentage, rounded to the cent, with a dry run that lists old and new prices.
+- Why: a price change across a whole category takes 1 request per product today.
+
 ## Total
 
-25 hours.
+30 hours.
