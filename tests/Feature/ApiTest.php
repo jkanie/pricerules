@@ -268,6 +268,26 @@ class ApiTest extends TestCase
         $this->getJson('/api/rules?coupon=yes')->assertUnprocessable()->assertJsonValidationErrors('coupon');
     }
 
+    public function test_rules_can_be_found_by_part_of_their_name(): void
+    {
+        foreach (['Spring sale', 'Staff discount', '10% off shoes', 'Shoe_club'] as $name) {
+            $this->postJson('/api/rules', ['name' => $name, 'type' => 'amount_off', 'params' => ['amount_cents' => 100]])
+                ->assertCreated();
+        }
+        $names = fn (string $q) => array_column($this->getJson('/api/rules?q='.urlencode($q))->assertOk()->json(), 'name');
+
+        // Any case, any part of the name.
+        $this->assertSame(['Spring sale'], $names('SALE'));
+        $this->assertSame(['Staff discount'], $names(' Disc '));
+        // % and _ are matched as written, not as LIKE wild cards.
+        $this->assertSame(['10% off shoes'], $names('%'));
+        $this->assertSame(['Shoe_club'], $names('_'));
+        $this->assertSame(['10% off shoes', 'Shoe_club'], $names('shoe'));
+        $this->assertCount(4, $this->getJson('/api/rules?q=')->assertOk()->json());
+        $this->assertSame([], $names('winter'));
+        $this->getJson('/api/rules?q[]=x')->assertUnprocessable()->assertJsonValidationErrors('q');
+    }
+
     public function test_bad_product_changes_are_refused(): void
     {
         $this->getJson('/api/products/NOPE')->assertNotFound();

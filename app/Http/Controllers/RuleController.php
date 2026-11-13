@@ -20,6 +20,7 @@ class RuleController extends Controller
             'type' => ['sometimes', 'string', Valid::in(Rule::TYPES)],
             'in_force' => ['sometimes', 'boolean'],
             'coupon' => ['sometimes', 'boolean'],
+            'q' => ['sometimes', 'nullable', 'string', 'max:255'],
         ]);
         $query = Rule::query()->orderByDesc('priority')->orderBy('id');
         if ($request->has('type')) {
@@ -35,6 +36,12 @@ class RuleController extends Controller
         if ($request->has('coupon')) {
             // ?coupon=1 keeps the rules that need a coupon code, ?coupon=0 the rules that apply without 1.
             $request->boolean('coupon') ? $query->whereNotNull('coupon_code') : $query->whereNull('coupon_code');
+        }
+        $text = trim((string) $request->query('q', ''));
+        if ($text !== '') {
+            // The same match as the product list: part of the name, A to Z folded, with % and _ taken as written.
+            $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], strtolower($text)).'%';
+            $query->whereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$like]);
         }
 
         return $query->get();
