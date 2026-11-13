@@ -252,6 +252,22 @@ class ApiTest extends TestCase
         $this->getJson('/api/rules?in_force=maybe')->assertUnprocessable()->assertJsonValidationErrors('in_force');
     }
 
+    public function test_rules_can_be_listed_by_whether_they_need_a_coupon(): void
+    {
+        $add = fn (string $name, array $extra = []) => $this->postJson('/api/rules',
+            ['name' => $name, 'type' => 'amount_off', 'params' => ['amount_cents' => 100]] + $extra)->assertCreated();
+        $add('Plain');
+        $add('Spring', ['coupon_code' => 'SPRING10']);
+        $add('Staff', ['coupon_code' => 'STAFF', 'priority' => 5]);
+
+        $names = fn (string $url) => array_column($this->getJson($url)->assertOk()->json(), 'name');
+        $this->assertSame(['Staff', 'Spring'], $names('/api/rules?coupon=1'));
+        $this->assertSame(['Plain'], $names('/api/rules?coupon=0'));
+        $this->assertSame(['Staff', 'Plain', 'Spring'], $names('/api/rules'));
+        $this->assertSame(['Staff', 'Spring'], $names('/api/rules?coupon=1&type=amount_off'));
+        $this->getJson('/api/rules?coupon=yes')->assertUnprocessable()->assertJsonValidationErrors('coupon');
+    }
+
     public function test_bad_product_changes_are_refused(): void
     {
         $this->getJson('/api/products/NOPE')->assertNotFound();

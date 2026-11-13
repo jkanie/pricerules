@@ -19,6 +19,7 @@ class RuleController extends Controller
         $request->validate([
             'type' => ['sometimes', 'string', Valid::in(Rule::TYPES)],
             'in_force' => ['sometimes', 'boolean'],
+            'coupon' => ['sometimes', 'boolean'],
         ]);
         $query = Rule::query()->orderByDesc('priority')->orderBy('id');
         if ($request->has('type')) {
@@ -30,6 +31,10 @@ class RuleController extends Controller
                 ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $now))
                 ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $now));
             $request->boolean('in_force') ? $query->where($inForce) : $query->whereNot($inForce);
+        }
+        if ($request->has('coupon')) {
+            // ?coupon=1 keeps the rules that need a coupon code, ?coupon=0 the rules that apply without 1.
+            $request->boolean('coupon') ? $query->whereNotNull('coupon_code') : $query->whereNull('coupon_code');
         }
 
         return $query->get();
