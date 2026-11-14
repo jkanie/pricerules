@@ -57,6 +57,21 @@ class ProductController extends Controller
         return $query->get();
     }
 
+    /**
+     * The categories in use, A to Z, each with its count of products. The products with no category come last,
+     * as category null, the same products that ?category= (empty) lists.
+     */
+    public function categories()
+    {
+        $rows = Product::query()
+            ->selectRaw('category, COUNT(*) AS products')
+            ->groupBy('category')
+            ->get()
+            ->map(fn ($row) => ['category' => $row->category, 'products' => (int) $row->products]);
+
+        return $rows->sortBy(fn ($row) => [$row['category'] === null ? 1 : 0, (string) $row['category']])->values();
+    }
+
     public function store(Request $request)
     {
         $data = $request->validate([

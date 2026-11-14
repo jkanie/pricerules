@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\Route;
 
 // Reading and quoting need no token.
 Route::get('/products', [ProductController::class, 'index']);
+Route::get('/categories', [ProductController::class, 'categories']);
 Route::get('/products/{product:sku}', [ProductController::class, 'show']);
 Route::get('/rules', [RuleController::class, 'index']);
 Route::get('/rules/{rule}', [RuleController::class, 'show']);

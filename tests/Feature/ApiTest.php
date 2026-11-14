@@ -195,6 +195,25 @@ class ApiTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('max_price_cents');
     }
 
+    public function test_categories_are_listed_with_their_product_counts(): void
+    {
+        foreach ([['C-1', 'kitchen'], ['C-2', 'garden'], ['C-3', null], ['C-4', 'kitchen'], ['C-5', 'Bath']] as [$sku, $category]) {
+            $this->postJson('/api/products', ['sku' => $sku, 'name' => $sku, 'price_cents' => 100, 'category' => $category])->assertCreated();
+        }
+
+        // With MUG (kitchen) and INK (no category) from setUp. Named categories by byte order, so Bath comes before
+        // garden, then the products with no category.
+        $this->getJson('/api/categories')->assertOk()->assertExactJson([
+            ['category' => 'Bath', 'products' => 1],
+            ['category' => 'garden', 'products' => 1],
+            ['category' => 'kitchen', 'products' => 3],
+            ['category' => null, 'products' => 2],
+        ]);
+        // The counts agree with the product list's own filter.
+        $this->assertCount(2, $this->getJson('/api/products?category=')->json());
+        $this->assertCount(3, $this->getJson('/api/products?category=kitchen')->json());
+    }
+
     public function test_products_can_be_sorted_by_name(): void
     {
         foreach ([['N-1', 'banana'], ['N-2', 'Apple'], ['N-3', 'cherry'], ['N-4', 'apple']] as [$sku, $name]) {
