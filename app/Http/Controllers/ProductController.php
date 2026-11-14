@@ -23,11 +23,15 @@ class ProductController extends Controller
             'min_price_cents' => ['sometimes', 'integer', 'min:0'],
             // gte refuses a field whose partner is missing, so it applies only when both are given.
             'max_price_cents' => ['sometimes', 'integer', 'min:0', ...($request->has('min_price_cents') ? ['gte:min_price_cents'] : [])],
-            'sort' => ['sometimes', 'string', 'in:sku,-sku,price_cents,-price_cents'],
+            'sort' => ['sometimes', 'string', 'in:sku,-sku,price_cents,-price_cents,name,-name'],
         ]);
         $sort = (string) $request->query('sort', 'sku');
         $column = ltrim($sort, '-');
-        $query = Product::query()->orderBy($column, str_starts_with($sort, '-') ? 'desc' : 'asc');
+        $direction = str_starts_with($sort, '-') ? 'desc' : 'asc';
+        // Names sort with A to Z folded, as ?q= matches them, such that SQLite and PostgreSQL give the same order.
+        $query = $column === 'name'
+            ? Product::query()->orderByRaw('LOWER(name) '.$direction)
+            : Product::query()->orderBy($column, $direction);
         if ($column !== 'sku') {
             $query->orderBy('sku');
         }
