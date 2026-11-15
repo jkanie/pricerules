@@ -60,6 +60,30 @@ class RuleController extends Controller
         return $rule;
     }
 
+    /**
+     * Whether a coupon code can be used now, such as for a checkout that checks a code as it is typed. The code is
+     * read in any case, as a quote reads it. reason is null when the code is usable, else the 1st check that fails,
+     * in the order a quote makes them: off, not_started, ended, used_up. The cart and the customer group are not
+     * checked here: a quote still decides whether the rule applies to them.
+     */
+    public function coupon(string $code)
+    {
+        $rule = Rule::where('coupon_code', strtoupper($code))->first();
+        if ($rule === null) {
+            return response()->json(['message' => "No rule has the coupon code {$code}."], 404);
+        }
+        $now = now();
+        $reason = match (true) {
+            ! $rule->active => 'off',
+            $rule->starts_at !== null && $rule->starts_at->greaterThan($now) => 'not_started',
+            $rule->ends_at !== null && $rule->ends_at->lessThanOrEqualTo($now) => 'ended',
+            $rule->uses_left === 0 => 'used_up',
+            default => null,
+        };
+
+        return ['code' => $rule->coupon_code, 'usable' => $reason === null, 'reason' => $reason, 'rule' => $rule];
+    }
+
     public function destroy(Rule $rule)
     {
         $rule->delete();

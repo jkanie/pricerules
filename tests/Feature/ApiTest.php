@@ -344,6 +344,33 @@ class ApiTest extends TestCase
         $this->getJson("/api/rules/$id")->assertOk()->assertJsonPath('uses_left', 0);
     }
 
+    public function test_a_coupon_code_says_whether_it_can_be_used_now(): void
+    {
+        $this->travelTo('2027-03-10 12:00:00');
+        $make = fn (string $code, array $extra = []) => $this->postJson('/api/rules', ['name' => $code, 'type' => 'amount_off',
+            'params' => ['amount_cents' => 100], 'coupon_code' => $code, ...$extra])->assertCreated()->json('id');
+        $id = $make('SPRING', ['usage_limit' => 1]);
+        $make('OFF', ['active' => false]);
+        $make('SOON', ['starts_at' => '2027-03-11T00:00:00Z']);
+        $make('GONE', ['ends_at' => '2027-03-10T12:00:00Z']);
+        // Any case, as a quote reads it, with the rule as GET /api/rules/{id} shows it.
+        $this->getJson('/api/coupons/spring')->assertOk()
+            ->assertJson(['code' => 'SPRING', 'usable' => true, 'reason' => null])
+            ->assertJsonPath('rule.id', $id)->assertJsonPath('rule.uses_left', 1);
+        foreach (['OFF' => 'off', 'SOON' => 'not_started', 'GONE' => 'ended'] as $code => $reason) {
+            $this->getJson("/api/coupons/$code")->assertOk()->assertJson(['usable' => false, 'reason' => $reason]);
+        }
+        // The last use is spent by an order, and the code then says so.
+        $this->postJson('/api/orders', ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'coupon_codes' => ['spring']])
+            ->assertCreated();
+        $this->getJson('/api/coupons/SPRING')->assertOk()->assertJson(['usable' => false, 'reason' => 'used_up']);
+        // An ends_at 1 second later is still in force, as in a quote.
+        Rule::where('coupon_code', 'GONE')->update(['ends_at' => '2027-03-10 12:00:01']);
+        $this->getJson('/api/coupons/gone')->assertOk()->assertJson(['usable' => true]);
+        $this->getJson('/api/coupons/NOPE')->assertNotFound()
+            ->assertExactJson(['message' => 'No rule has the coupon code NOPE.']);
+    }
+
     public function test_rules_can_be_found_by_part_of_their_name(): void
     {
         foreach (['Spring sale', 'Staff discount', '10% off shoes', 'Shoe_club'] as $name) {

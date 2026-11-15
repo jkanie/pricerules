@@ -12,6 +12,7 @@ Route::get('/categories', [ProductController::class, 'categories']);
 Route::get('/products/{product:sku}', [ProductController::class, 'show']);
 Route::get('/rules', [RuleController::class, 'index']);
 Route::get('/rules/{rule}', [RuleController::class, 'show']);
+Route::get('/coupons/{code}', [RuleController::class, 'coupon']);
 Route::post('/quotes', [QuoteController::class, 'quote']);
 Route::get('/orders/{order}', [QuoteController::class, 'show']);
 
