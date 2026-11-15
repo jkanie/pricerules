@@ -320,6 +320,30 @@ class ApiTest extends TestCase
         $this->getJson('/api/rules?coupon=yes')->assertUnprocessable()->assertJsonValidationErrors('coupon');
     }
 
+    public function test_a_coupon_rule_shows_its_uses_left(): void
+    {
+        $id = $this->postJson('/api/rules', ['name' => 'Spring', 'type' => 'amount_off', 'params' => ['amount_cents' => 100],
+            'coupon_code' => 'SPRING', 'usage_limit' => 2])->assertCreated()->assertJsonPath('uses_left', 2)->json('id');
+        $this->postJson('/api/rules', ['name' => 'Plain', 'type' => 'amount_off', 'params' => ['amount_cents' => 50]])
+            ->assertCreated()->assertJsonPath('uses_left', null);
+        $cart = ['items' => [['sku' => 'MUG', 'quantity' => 1]], 'coupon_codes' => ['spring']];
+
+        // A quote spends nothing, an order spends 1 use.
+        $this->postJson('/api/quotes', $cart)->assertOk();
+        $this->getJson("/api/rules/$id")->assertOk()->assertJsonPath('uses_left', 2);
+        $this->postJson('/api/orders', $cart)->assertCreated();
+        $this->getJson("/api/rules/$id")->assertOk()->assertJsonPath('uses_left', 1)->assertJsonPath('times_used', 1);
+        $this->postJson('/api/orders', $cart)->assertCreated();
+        $this->assertSame([['Spring', 0], ['Plain', null]],
+            array_map(fn ($r) => [$r['name'], $r['uses_left']], $this->getJson('/api/rules')->assertOk()->json()));
+        // The last use is gone: the next order is refused, and uses_left stays at 0.
+        $this->postJson('/api/orders', $cart)->assertStatus(409);
+        $this->getJson("/api/rules/$id")->assertOk()->assertJsonPath('uses_left', 0);
+        // A limit that is now below times_used never shows less than 0.
+        Rule::whereKey($id)->update(['usage_limit' => 1]);
+        $this->getJson("/api/rules/$id")->assertOk()->assertJsonPath('uses_left', 0);
+    }
+
     public function test_rules_can_be_found_by_part_of_their_name(): void
     {
         foreach (['Spring sale', 'Staff discount', '10% off shoes', 'Shoe_club'] as $name) {

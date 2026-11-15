@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
 class Rule extends Model
@@ -14,6 +15,8 @@ class Rule extends Model
     ];
 
     protected $attributes = ['times_used' => 0, 'priority' => 0, 'exclusive' => false, 'active' => true];
+
+    protected $appends = ['uses_left'];
 
     protected function casts(): array
     {
@@ -28,6 +31,17 @@ class Rule extends Model
             'usage_limit' => 'integer',
             'times_used' => 'integer',
         ];
+    }
+
+    /**
+     * The coupon uses an order can still spend: usage_limit less times_used, never below 0. NULL when the rule has
+     * no usage limit (only a rule with a coupon code can have 1).
+     */
+    protected function usesLeft(): Attribute
+    {
+        return Attribute::get(fn () => $this->usage_limit === null
+            ? null
+            : max(0, $this->usage_limit - $this->times_used));
     }
 
     /** Coupon codes are stored in capitals, which makes them match without regard to case. */
