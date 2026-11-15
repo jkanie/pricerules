@@ -13,7 +13,8 @@ class ProductController extends Controller
      * or name holds the text, ignoring the case of A to Z. % and _ in the text are plain characters.
      * ?min_price_cents=500&max_price_cents=2000 keeps the products whose list price is in that range, both ends
      * included. ?sort=price_cents lists the cheapest 1st, ?sort=-price_cents the dearest 1st, with equal prices by
-     * SKU. ?sort=sku (the default) and ?sort=-sku list by SKU either way.
+     * SKU. ?sort=sku (the default) and ?sort=-sku list by SKU either way. ?limit=20&offset=40 returns 1 page of the
+     * list (limit 1 to 500), and the X-Total-Count header always gives the count of the whole filtered list.
      */
     public function index(Request $request)
     {
@@ -24,6 +25,8 @@ class ProductController extends Controller
             // gte refuses a field whose partner is missing, so it applies only when both are given.
             'max_price_cents' => ['sometimes', 'integer', 'min:0', ...($request->has('min_price_cents') ? ['gte:min_price_cents'] : [])],
             'sort' => ['sometimes', 'string', 'in:sku,-sku,price_cents,-price_cents,name,-name'],
+            'limit' => ['sometimes', 'integer', 'min:1', 'max:500'],
+            'offset' => ['sometimes', 'integer', 'min:0'],
         ]);
         $sort = (string) $request->query('sort', 'sku');
         $column = ltrim($sort, '-');
@@ -54,7 +57,16 @@ class ProductController extends Controller
             $query->where('price_cents', '<=', (int) $request->query('max_price_cents'));
         }
 
-        return $query->get();
+        $total = (clone $query)->count();
+        if ($request->has('limit')) {
+            $query->limit((int) $request->query('limit'));
+        }
+        if ($request->has('offset')) {
+            // SQLite needs a LIMIT before an OFFSET, so an offset alone takes every row after it.
+            $query->offset((int) $request->query('offset'))->limit($request->has('limit') ? (int) $request->query('limit') : PHP_INT_MAX);
+        }
+
+        return response()->json($query->get())->header('X-Total-Count', (string) $total);
     }
 
     /**

@@ -195,6 +195,27 @@ class ApiTest extends TestCase
             ->assertUnprocessable()->assertJsonValidationErrors('max_price_cents');
     }
 
+    public function test_products_come_in_pages_with_the_total_in_a_header(): void
+    {
+        foreach (['P-1', 'P-2', 'P-3', 'P-4', 'P-5'] as $sku) {
+            $this->postJson('/api/products', ['sku' => $sku, 'name' => $sku, 'price_cents' => 100])->assertCreated();
+        }
+        $skus = fn (string $query) => array_column($this->getJson('/api/products?q=p-&'.$query)->assertOk()->json(), 'sku');
+
+        $this->assertSame(['P-1', 'P-2'], $skus('limit=2'));
+        $this->assertSame(['P-3', 'P-4'], $skus('limit=2&offset=2'));
+        $this->assertSame(['P-5'], $skus('limit=2&offset=4'));
+        $this->assertSame([], $skus('limit=2&offset=6'));
+        $this->assertSame(['P-4', 'P-5'], $skus('offset=3'));
+        $this->assertSame(['P-5', 'P-4'], $skus('sort=-sku&limit=2'));
+        // The total counts the whole filtered list, whatever the page.
+        $this->getJson('/api/products?q=p-&limit=2&offset=4')->assertHeader('X-Total-Count', '5');
+        $this->getJson('/api/products')->assertHeader('X-Total-Count', '7');
+        foreach (['limit=0', 'limit=501', 'limit=x', 'offset=-1'] as $bad) {
+            $this->getJson('/api/products?'.$bad)->assertUnprocessable();
+        }
+    }
+
     public function test_categories_are_listed_with_their_product_counts(): void
     {
         foreach ([['C-1', 'kitchen'], ['C-2', 'garden'], ['C-3', null], ['C-4', 'kitchen'], ['C-5', 'Bath']] as [$sku, $category]) {
