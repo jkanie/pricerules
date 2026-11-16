@@ -86,4 +86,38 @@ class RulesCommandTest extends TestCase
         $this->assertSame([$code->id], $ids('coupon=1'));
         $this->assertSame([$tea->id, $cut->id], $ids('coupon=0'));
     }
+
+    public function test_rules_show_lists_every_field_of_1_rule(): void
+    {
+        Carbon::setTestNow('2026-11-15 12:00:00');
+        $rule = $this->rule([
+            'name' => 'Trade 5%', 'params' => ['percent' => 5], 'priority' => 3, 'exclusive' => true,
+            'starts_at' => '2026-11-16 08:00:00', 'customer_groups' => ['trade', 'staff'],
+            'coupon_code' => 'trade5', 'usage_limit' => 10,
+        ]);
+        $rule->forceFill(['times_used' => 4])->save();
+        $this->artisan('rules:show', ['id' => $rule->id])->expectsTable(['Field', 'Value'], [
+            ['ID', $rule->id],
+            ['Name', 'Trade 5%'],
+            ['Type', 'percent_off'],
+            ['Params', '{"percent":5}'],
+            ['Priority', 3],
+            ['Exclusive', 'yes'],
+            ['Active', 'yes'],
+            ['Starts', '2026-11-16 08:00:00 UTC'],
+            ['Ends', 'no end date'],
+            ['Customer groups', 'trade, staff'],
+            ['Coupon', 'TRADE5'],
+            ['Uses', '4 of 10'],
+            ['Now', 'not_started'],
+        ])->assertSuccessful();
+
+        $open = $this->rule(['name' => 'Open']);
+        $this->artisan('rules:show', ['id' => $open->id])
+            ->expectsOutputToContain('every group')
+            ->expectsOutputToContain('0 (no limit)')
+            ->expectsOutputToContain('usable')
+            ->assertSuccessful();
+        $this->artisan('rules:show', ['id' => 999])->expectsOutput('No rule has the id 999.')->assertExitCode(1);
+    }
 }
