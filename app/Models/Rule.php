@@ -57,6 +57,12 @@ class Rule extends Model
             ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $now));
     }
 
+    /** With $needs, the rules that need a coupon code. Without it, the rules that apply without 1. */
+    public function scopeNeedsCoupon(Builder $query, bool $needs = true): void
+    {
+        $needs ? $query->whereNotNull('coupon_code') : $query->whereNull('coupon_code');
+    }
+
     /**
      * Why the rule cannot be used at $now, as the 1st check that fails in the order a quote makes them: off,
      * not_started, ended, used_up. NULL when it can be used. The cart and the customer group are not checked.

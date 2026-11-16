@@ -54,6 +54,36 @@ class RulesCommandTest extends TestCase
         Carbon::setTestNow('2026-11-15 12:00:00');
         $this->rule(['name' => 'Off', 'active' => false]);
         $this->artisan('rules:list', ['--in-force' => true])
-            ->expectsOutput('No rule is in force now.')->assertSuccessful();
+            ->expectsOutput('No rule matches these options.')->assertSuccessful();
+    }
+
+    public function test_rules_list_keeps_1_type_or_the_coupon_rules_as_the_api_does(): void
+    {
+        Carbon::setTestNow('2026-11-15 12:00:00');
+        $tea = $this->rule(['name' => 'Tea 10%', 'priority' => 5]);
+        $code = $this->rule(['name' => 'Code', 'coupon_code' => 'save5']);
+        $cut = $this->rule(['name' => '$5 off', 'type' => 'amount_off', 'params' => ['amount_cents' => 500]]);
+        $headers = ['ID', 'Name', 'Type', 'Priority', 'Coupon', 'Uses left', 'Now'];
+
+        $this->artisan('rules:list', ['--type' => 'amount_off'])->expectsTable($headers, [
+            [$cut->id, '$5 off', 'amount_off', 0, '', 'no limit', 'usable'],
+        ])->assertSuccessful();
+        $this->artisan('rules:list', ['--coupon' => true])->expectsTable($headers, [
+            [$code->id, 'Code', 'percent_off', 0, 'SAVE5', 'no limit', 'usable'],
+        ])->assertSuccessful();
+        $this->artisan('rules:list', ['--type' => 'percent_off', '--coupon' => true, '--in-force' => true])
+            ->expectsTable($headers, [[$code->id, 'Code', 'percent_off', 0, 'SAVE5', 'no limit', 'usable']])
+            ->assertSuccessful();
+        $this->artisan('rules:list', ['--type' => 'tiered'])
+            ->expectsOutput('No rule matches these options.')->assertSuccessful();
+        $this->artisan('rules:list', ['--type' => 'half_off'])
+            ->expectsOutput('No rule type is called half_off. The types are '.implode(', ', Rule::TYPES).'.')
+            ->assertExitCode(2);
+
+        // The API's filters give the same rules.
+        $ids = fn (string $q) => array_column($this->getJson("/api/rules?$q")->assertOk()->json(), 'id');
+        $this->assertSame([$cut->id], $ids('type=amount_off'));
+        $this->assertSame([$code->id], $ids('coupon=1'));
+        $this->assertSame([$tea->id, $cut->id], $ids('coupon=0'));
     }
 }

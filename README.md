@@ -115,7 +115,7 @@ The times are in UTC. A revoked token fails on the next request: the order reque
 
 ## Rules at the command line
 
-`rules:list` lists the rules by priority, as `GET /api/rules` does, with why each one cannot be used now. `Now` is `usable`, or the 1st check that fails in the order a quote makes them: `off`, `not_started`, `ended`, `used_up`. As with `GET /api/coupons/{code}`, the cart and the customer group are not checked. `--in-force` keeps only the rules that are turned on and inside their dates, the same rules as `GET /api/rules?in_force=1`, so a coupon with no uses left is still listed.
+`rules:list` lists the rules by priority, as `GET /api/rules` does, with why each one cannot be used now. `Now` is `usable`, or the 1st check that fails in the order a quote makes them: `off`, `not_started`, `ended`, `used_up`. As with `GET /api/coupons/{code}`, the cart and the customer group are not checked. `--in-force` keeps only the rules that are turned on and inside their dates, the same rules as `GET /api/rules?in_force=1`, so a coupon with no uses left is still listed. `--type=amount_off` keeps 1 type, and `--coupon` keeps the rules that need a coupon code, the same rules as `?type=` and `?coupon=1`. The options can be combined. An unknown type stops the command with exit status 2 and lists the types.
 
 On the sample data of `migrate --seed`, every rule is in force:
 
@@ -153,7 +153,7 @@ DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_DATABASE=pricerules_test \
 
 On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` with PHP 8.4. It also runs `php artisan test` with PHP 8.4 and 8.5, once on SQLite and once on a PostgreSQL 16 service (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-52 tests with 12,863 assertions:
+53 tests with 12,891 assertions:
 
 - The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time, hands out leftover cents 1 at a time. Half of the random bundles list SKUs, the other half list items with 1 to 3 units each. Every total, every discount on every line and every applied rule must match.
 - The same test checks the rules every quote must keep: no line below its floor or below 0, lines that add up to the total, a reason for every rule, an exclusive rule that applies alone.
@@ -162,7 +162,7 @@ On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` wit
 - Unit tests pin each rule type, the rounding, the floors, the date window bounds, coupon limits.
 - API tests cover validation, coupon spending, a coupon running out (409), unknown coupons, pricing at another time. They send a staff token.
 - Token tests cover changes with no token (401), a shop token on changes (403), quotes and orders with a shop token, changes with a staff token, revoked tokens (401), the 3 token commands.
-- Rule command tests cover `rules:list` with each reason a rule cannot be used, and check that `--in-force` keeps the same rules as `GET /api/rules?in_force=1`.
+- Rule command tests cover `rules:list` with each reason a rule cannot be used, and check that `--in-force`, `--type`, `--coupon` keep the same rules as the filters of `GET /api/rules`.
 
 ## How pricing decides
 

@@ -33,7 +33,7 @@ class RuleController extends Controller
         }
         if ($request->has('coupon')) {
             // ?coupon=1 keeps the rules that need a coupon code, ?coupon=0 the rules that apply without 1.
-            $request->boolean('coupon') ? $query->whereNotNull('coupon_code') : $query->whereNull('coupon_code');
+            $query->needsCoupon($request->boolean('coupon'));
         }
         $text = trim((string) $request->query('q', ''));
         if ($text !== '') {
