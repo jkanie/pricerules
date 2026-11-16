@@ -28,9 +28,7 @@ class RuleController extends Controller
         }
         if ($request->has('in_force')) {
             $now = now();
-            $inForce = fn ($q) => $q->where('active', true)
-                ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $now))
-                ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $now));
+            $inForce = fn ($q) => $q->inForce($now);
             $request->boolean('in_force') ? $query->where($inForce) : $query->whereNot($inForce);
         }
         if ($request->has('coupon')) {
@@ -72,14 +70,7 @@ class RuleController extends Controller
         if ($rule === null) {
             return response()->json(['message' => "No rule has the coupon code {$code}."], 404);
         }
-        $now = now();
-        $reason = match (true) {
-            ! $rule->active => 'off',
-            $rule->starts_at !== null && $rule->starts_at->greaterThan($now) => 'not_started',
-            $rule->ends_at !== null && $rule->ends_at->lessThanOrEqualTo($now) => 'ended',
-            $rule->uses_left === 0 => 'used_up',
-            default => null,
-        };
+        $reason = $rule->blockedReason(now());
 
         return ['code' => $rule->coupon_code, 'usable' => $reason === null, 'reason' => $reason, 'rule' => $rule];
     }

@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use DateTimeInterface;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 
@@ -42,6 +44,32 @@ class Rule extends Model
         return Attribute::get(fn () => $this->usage_limit === null
             ? null
             : max(0, $this->usage_limit - $this->times_used));
+    }
+
+    /**
+     * The rules that are turned on and inside their dates at $now: from starts_at, up to but not at ends_at. These
+     * are the checks a quote makes before it looks at customer groups and coupon codes.
+     */
+    public function scopeInForce(Builder $query, DateTimeInterface $now): void
+    {
+        $query->where('active', true)
+            ->where(fn ($q) => $q->whereNull('starts_at')->orWhere('starts_at', '<=', $now))
+            ->where(fn ($q) => $q->whereNull('ends_at')->orWhere('ends_at', '>', $now));
+    }
+
+    /**
+     * Why the rule cannot be used at $now, as the 1st check that fails in the order a quote makes them: off,
+     * not_started, ended, used_up. NULL when it can be used. The cart and the customer group are not checked.
+     */
+    public function blockedReason(DateTimeInterface $now): ?string
+    {
+        return match (true) {
+            ! $this->active => 'off',
+            $this->starts_at !== null && $this->starts_at > $now => 'not_started',
+            $this->ends_at !== null && $this->ends_at <= $now => 'ended',
+            $this->uses_left === 0 => 'used_up',
+            default => null,
+        };
     }
 
     /** Coupon codes are stored in capitals, which makes them match without regard to case. */
