@@ -44,10 +44,7 @@ class ProductController extends Controller
         }
         $text = trim((string) $request->query('q', ''));
         if ($text !== '') {
-            // LOWER() folds A to Z on SQLite and PostgreSQL alike, so the text is folded the same way here.
-            $like = '%'.str_replace(['!', '%', '_'], ['!!', '!%', '!_'], strtolower($text)).'%';
-            $query->where(fn ($q) => $q->whereRaw("LOWER(sku) LIKE ? ESCAPE '!'", [$like])
-                ->orWhereRaw("LOWER(name) LIKE ? ESCAPE '!'", [$like]));
+            $query->matching($text);
         }
 
         if ($request->has('min_price_cents')) {

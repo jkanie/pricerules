@@ -43,4 +43,28 @@ class ProductsCommandTest extends TestCase
             ->expectsOutput('No product is in the category Kitchen.')->assertSuccessful();
         $this->assertSame([], $this->getJson('/api/products?category=Kitchen')->assertOk()->json());
     }
+
+    public function test_products_list_searches_sku_and_name_as_the_api_does(): void
+    {
+        Product::create(['sku' => 'MUG-01', 'name' => 'Stoneware mug', 'price_cents' => 1800, 'category' => 'kitchen']);
+        Product::create(['sku' => 'TEA-01', 'name' => 'Green tea', 'price_cents' => 1250, 'category' => 'pantry']);
+        Product::create(['sku' => 'TEA-02', 'name' => 'Tea for 2 (100% leaf)', 'price_cents' => 900, 'category' => 'pantry']);
+        $head = ['SKU', 'Name', 'Category', 'Price (cents)', 'Cost (cents)'];
+
+        // Each search keeps the same SKUs as ?q= with the same text: SKU or name, any case, % as a plain character.
+        foreach (['tea' => ['TEA-01', 'TEA-02'], 'MUG' => ['MUG-01'], '100%' => ['TEA-02'], '%' => ['TEA-02'], 'a-0' => ['TEA-01', 'TEA-02']] as $text => $skus) {
+            $this->assertSame($skus, array_column($this->getJson('/api/products?q='.urlencode($text))->assertOk()->json(), 'sku'), $text);
+            $rows = Product::query()->whereIn('sku', $skus)->orderBy('sku')->get()
+                ->map(fn (Product $p) => [$p->sku, $p->name, $p->category, $p->price_cents, 'not set'])->all();
+            $this->artisan('products:list', ['--search' => $text])->expectsTable($head, $rows)->assertSuccessful();
+        }
+
+        // With --category, both apply. A search with no match says so.
+        $this->artisan('products:list', ['--search' => ' green ', '--category' => 'pantry'])
+            ->expectsTable($head, [['TEA-01', 'Green tea', 'pantry', 1250, 'not set']])->assertSuccessful();
+        $this->artisan('products:list', ['--search' => 'mug', '--category' => 'pantry'])
+            ->expectsOutput('No product has "mug" in its SKU or name in the category pantry.')->assertSuccessful();
+        $this->artisan('products:list', ['--search' => 'cup'])
+            ->expectsOutput('No product has "cup" in its SKU or name.')->assertSuccessful();
+    }
 }

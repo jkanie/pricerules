@@ -141,7 +141,7 @@ These outputs come from a real run against the sample shop, with the token repla
 
 ## Products at the command line
 
-`products:list` lists the products by SKU, as `GET /api/products` does, with the list price and the cost in cents. A product with no category shows `none`, and a product with no cost shows `not set`. `--category=kitchen` keeps 1 category, matched exactly as `?category=kitchen` matches it, case included.
+`products:list` lists the products by SKU, as `GET /api/products` does, with the list price and the cost in cents. A product with no category shows `none`, and a product with no cost shows `not set`. `--category=kitchen` keeps 1 category, matched exactly as `?category=kitchen` matches it, case included. `--search=mug` keeps the products whose SKU or name holds the text, as `?q=mug` does: the case of A to Z does not matter, and `%` and `_` are plain characters. Both options can be given together.
 
 On the sample data of `migrate --seed`:
 
@@ -176,7 +176,7 @@ DB_CONNECTION=pgsql DB_HOST=127.0.0.1 DB_DATABASE=pricerules_test \
 
 On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` with PHP 8.4. It also runs `php artisan test` with PHP 8.4 and 8.5, once on SQLite and once on a PostgreSQL 16 service (see [.github/workflows/ci.yml](.github/workflows/ci.yml)).
 
-56 tests with 12,938 assertions:
+57 tests with 12,990 assertions:
 
 - The oracle test prices 500 seeded random carts against seeded random rule sets 2 ways: with the engine, and with a slow reference pricer in `tests/Support/ReferencePricer.php`. The reference is written from the rules in this README, without the engine's code. It counts free units 1 at a time, builds bundles 1 set at a time, hands out leftover cents 1 at a time. Half of the random bundles list SKUs, the other half list items with 1 to 3 units each. Every total, every discount on every line and every applied rule must match.
 - The same test checks the rules every quote must keep: no line below its floor or below 0, lines that add up to the total, a reason for every rule, an exclusive rule that applies alone.
@@ -186,7 +186,7 @@ On every push and pull request, GitHub Actions runs `vendor/bin/pint --test` wit
 - API tests cover validation, coupon spending, a coupon running out (409), unknown coupons, pricing at another time. They send a staff token.
 - Token tests cover changes with no token (401), a shop token on changes (403), quotes and orders with a shop token, changes with a staff token, revoked tokens (401), the 3 token commands.
 - Rule command tests cover `rules:list` with each reason a rule cannot be used, `rules:show` with every field, and check that `--in-force`, `--type`, `--coupon` keep the same rules as the filters of `GET /api/rules`.
-- Product command tests cover `products:list` with a product that has no category and no cost, and check that `--category` keeps the same products as `GET /api/products?category=`, case included.
+- Product command tests cover `products:list` with a product that has no category and no cost, and check that `--category` keeps the same products as `GET /api/products?category=`, case included, and `--search` the same as `?q=`, with `%` as a plain character.
 
 ## How pricing decides
 
